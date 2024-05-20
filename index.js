@@ -1,6 +1,6 @@
 const express = require('express');
 require('dotenv').config();
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const cors = require('cors');
 const app = express();
 const port = process.env.PORT || 5000;
@@ -22,13 +22,33 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
-    const menuCollcation = client.db('resturantDB').collection('allFoods');
-
+    const menus = client.db('resturantDB');
+    const menuCollcation = menus.collection('allFoods');
+    const userOrderCollaction = menus.collection('userOrders');
     app.get('/menu', async (req, res) => {
       const result = await menuCollcation.find().toArray();
       res.send(result);
     });
 
+    app.post('/userOrder', async (req, res) => {
+      const user = req.body;
+      const result = await userOrderCollaction.insertOne(user);
+      res.send(result);
+    });
+
+    app.get('/carts', async (req, res) => {
+      const email = req.query.email;
+      const qurey = { email: email };
+      const result = await userOrderCollaction.find(qurey).toArray();
+      res.send(result);
+    });
+
+    app.delete('/carts/:id', async (req, res) => {
+      const id = req.params.id;
+      const qurey = { _id: new ObjectId(id) };
+      const result = await userOrderCollaction.deleteOne(qurey);
+      res.send(result);
+    });
     // Send a ping to confirm a successful connection
     // await client.db('admin').command({ ping: 1 });
     console.log(
