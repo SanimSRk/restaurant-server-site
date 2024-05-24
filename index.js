@@ -43,6 +43,17 @@ async function run() {
       });
     };
 
+    const verifyAdmin = async (req, res, next) => {
+      const email = req?.decode?.email;
+      const qurey = { email: email };
+      const isAdmin = await userAccessData.findOne(qurey);
+      if (!isAdmin) {
+        return res.status(401).send({ message: 'forbidden access' });
+      }
+
+      next();
+    };
+
     //jwt token secure data
     app.post('/jwt', async (req, res) => {
       const user = req.body;
@@ -90,29 +101,34 @@ async function run() {
       }
     });
 
-    app.get('/users', verifyToken, async (req, res) => {
+    app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
       const result = await userAccessData.find().toArray();
       res.send(result);
     });
-    app.delete('/users/:id', async (req, res) => {
+    app.delete('/users/:id', verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const qurey = { _id: new ObjectId(id) };
       const result = await userAccessData.deleteOne(qurey);
       res.send(result);
     });
 
-    app.patch('/users/admin/:id', async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
+    app.patch(
+      '/users/admin/:id',
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
 
-      const updateDac = {
-        $set: {
-          role: 'admin',
-        },
-      };
-      const result = await userAccessData.updateOne(filter, updateDac);
-      res.send(result);
-    });
+        const updateDac = {
+          $set: {
+            role: 'admin',
+          },
+        };
+        const result = await userAccessData.updateOne(filter, updateDac);
+        res.send(result);
+      }
+    );
 
     app.get('/user/admin/:email', verifyToken, async (req, res) => {
       const email = req?.params?.email;
@@ -127,7 +143,11 @@ async function run() {
       }
       res.send({ admin });
     });
-
+    app.post('/products', async (req, res) => {
+      const product = req.body;
+      const result = await menuCollcation.insertOne(product);
+      res.send(result);
+    });
     // Send a ping to confirm a successful connection
     // await client.db('admin').command({ ping: 1 });
     console.log(
