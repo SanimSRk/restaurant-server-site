@@ -4,6 +4,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const app = express();
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
@@ -27,6 +28,7 @@ async function run() {
     const menuCollcation = menus.collection('allFoods');
     const userOrderCollaction = menus.collection('userOrders');
     const userAccessData = menus.collection('user');
+    const paymentCollection = menus.collection('payment');
 
     //middlewrs verify token
     const verifyToken = (req, res, next) => {
@@ -143,11 +145,89 @@ async function run() {
       }
       res.send({ admin });
     });
-    app.post('/products', async (req, res) => {
+    app.post('/products', verifyToken, verifyAdmin, async (req, res) => {
       const product = req.body;
       const result = await menuCollcation.insertOne(product);
       res.send(result);
     });
+
+    app.get('/products', verifyToken, verifyAdmin, async (req, res) => {
+      const result = await menuCollcation.find().toArray();
+      res.send(result);
+    });
+    app.delete('/productss/:id', verifyToken, verifyAdmin, async (req, res) => {
+      const id = req?.params?.id;
+      const qurey = { _id: new ObjectId(id) };
+      const result = await menuCollcation.deleteOne(qurey);
+      res.send(result);
+    });
+
+    app.get('/menuss/:id', async (req, res) => {
+      const id = req.params.id;
+      const qurey = { _id: new ObjectId(id) };
+      const result = await menuCollcation.findOne(qurey);
+      res.send(result);
+    });
+
+    app.put('/menuss/:id', async (req, res) => {
+      const id = req.params.id;
+
+      const qurey = { _id: new ObjectId(id) };
+      const product = req.body;
+      const options = { upsert: true };
+      const updateDac = {
+        $set: {
+          category: product?.category,
+          name: product?.name,
+          recipe: product?.recipe,
+          price: product?.price,
+          image: product?.image,
+        },
+      };
+
+      const result = await menuCollcation.updateOne(qurey, updateDac, options);
+      res.send(result);
+    });
+
+    app.post('/create-payment-intent', async (req, res) => {
+      const { price } = req.body;
+
+      const amount = parseInt(price * 100);
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        currency: 'usd',
+        amount: amount,
+        payment_method_types: ['card'],
+      });
+
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    app.post('/payments', async (req, res) => {
+      const payment = req.body;
+      const result = await paymentCollection.insertOne(payment);
+
+      const qurey = {
+        _id: {
+          $in: payment.cartIds.map(id => new ObjectId(id)),
+        },
+      };
+      console.log(qurey);
+
+      const deleteResult = await userOrderCollaction.deleteMany(qurey);
+
+      res.send({ result, deleteResult });
+    });
+
+    app.get('/payment-hostry', async (req, res) => {
+      const email = req?.query?.email;
+      const qurey = { email: email };
+      const result = await paymentCollection.find(qurey).toArray();
+      res.send(result);
+    });
+
     // Send a ping to confirm a successful connection
     // await client.db('admin').command({ ping: 1 });
     console.log(
