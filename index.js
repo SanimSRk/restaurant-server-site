@@ -221,13 +221,71 @@ async function run() {
       res.send({ result, deleteResult });
     });
 
-    app.get('/payment-hostry', async (req, res) => {
+    app.get('/payment-hostry', verifyToken, async (req, res) => {
       const email = req?.query?.email;
+      if (email == !req.decode.email) {
+        return res.status(403).send({ message: 'forbidden access' });
+      }
       const qurey = { email: email };
       const result = await paymentCollection.find(qurey).toArray();
       res.send(result);
     });
 
+    app.get('/admin-stats', verifyToken, verifyAdmin, async (req, res) => {
+      const users = await userAccessData.estimatedDocumentCount();
+      const menuItems = await menuCollcation.estimatedDocumentCount();
+      const orders = await paymentCollection.estimatedDocumentCount();
+      // const payments = await paymentCollection.find().toArray();
+      // const revenue = payments.reduce((price, items) => price + items.price, 0);
+      const payment = await paymentCollection
+        .aggregate([
+          {
+            $group: {
+              _id: null,
+              totalRevenu: {
+                $sum: '$price',
+              },
+            },
+          },
+        ])
+        .toArray();
+      const revenue = payment.length > 0 ? payment[0].totalRevenu : 0;
+
+      res.send({ users, menuItems, orders, revenue });
+    });
+
+    app.get('/order-stats', async (req, res) => {
+      const result = await paymentCollection
+        .aggregate([
+          {
+            $unwind: '$menuItemIds',
+          },
+          {
+            $lookup: {
+              from: 'allFoods',
+              localField: 'menuItemIds',
+              foreignField: '_id',
+              as: 'menueItem',
+            },
+          },
+
+          {
+            $unwind: '$menueItem',
+          },
+          {
+            $group: {
+              _id: '$menueItem.category',
+              quantity: {
+                $sum: 1,
+              },
+              revenue: { $sum: '$menueItem.price' },
+            },
+          },
+        ])
+        .toArray();
+
+      res.send(result);
+    });
     // Send a ping to confirm a successful connection
     // await client.db('admin').command({ ping: 1 });
     console.log(
